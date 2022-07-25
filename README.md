@@ -18,3 +18,9 @@ Use:
 ```rust
 let service = FileCacheService::new("path/to/cache", "demo")?;
 ```
+
+## Storage: file hierarchy
+
+```
+[CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache.json
+```
