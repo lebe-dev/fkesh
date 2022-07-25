@@ -60,7 +60,7 @@ impl FileCacheService {
         debug!("cache item path '{}'", &cache_item_path.display());
 
         let filename = self.get_filename(name);
-        let file_path = self.get_cache_file_path(&filename);
+        let file_path = self.get_cache_file_path(&cache_item_path, &filename);
         debug!("destination file path '{}'", &file_path.display());
 
         let json = serde_json::to_string(item)?;
@@ -78,8 +78,11 @@ impl FileCacheService {
     pub fn get<'de, T: DeserializeOwned>(&self, namespace: &str, item_name: &str) -> OptionalResult<T> {
         info!("get entity from file cache: namespace='{}', item_name='{}'", namespace, item_name);
 
+        let cache_item_path = self.get_cache_item_path(
+            &self.root_path, &self.instance_name, namespace);
+
         let filename = self.get_filename(item_name);
-        let file_path = self.get_cache_file_path(&filename);
+        let file_path = self.get_cache_file_path(&cache_item_path, &filename);
 
         if file_path.exists() {
             let json = fs::read_to_string(&file_path)?;
@@ -110,8 +113,8 @@ impl FileCacheService {
         format!("{}-{}-cache.json", self.instance_name, cache_item_name)
     }
 
-    fn get_cache_file_path(&self, cache_item_name: &str) -> PathBuf {
-        Path::new(&self.root_path).join(cache_item_name)
+    fn get_cache_file_path(&self, cache_item_path: &PathBuf, cache_item_name: &str) -> PathBuf {
+        cache_item_path.join(cache_item_name)
     }
 }
 
@@ -119,14 +122,39 @@ impl FileCacheService {
 mod store_tests {
     use std::path::Path;
     use fake::{Fake, Faker};
-    use serde::Serialize;
+    use serde::{Serialize, Deserialize};
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
 
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Demo {
         pub login: String
+    }
+
+    #[test]
+    fn store_and_get() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = Demo {
+            login: "Jerry".to_string()
+        };
+
+        assert!(service.store(&namespace, &name, &demo).is_ok());
+
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+
+        assert_eq!(result, demo);
     }
 
     #[test]
