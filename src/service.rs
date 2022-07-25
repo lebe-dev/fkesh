@@ -1,10 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::{debug, error, info};
+use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
 
+use crate::error::FileCacheError;
 use crate::types::{EmptyResult, OperationResult, OptionalResult};
 
 /// # File cache service
@@ -14,7 +16,8 @@ use crate::types::{EmptyResult, OperationResult, OptionalResult};
 ///
 /// ## Storage hierarchy:
 ///
-/// `[CACHE BASE DIR]/[INSTANCE NAME]/[NAMESPACE]/[ITEM-NAME]-cache.json`
+/// Entity file path `[CACHE BASE DIR]/[INSTANCE NAME]/[NAMESPACE]/[ITEM-NAME]-cache.json`
+/// Entity metadata-file path `[CACHE BASE DIR]/[INSTANCE NAME]/[NAMESPACE]/[ITEM-NAME]-cache-metadata.json`
 ///
 /// ## Storage format
 ///
@@ -26,6 +29,15 @@ pub struct FileCacheService {
 
     instance_name: String
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FileCacheItemMetadata {
+    pub ttl_secs: u64,
+    pub created_unixtime: u64
+}
+
+pub const CACHE_FILENAME_POSTFIX: &str = "cache.json";
+pub const METADATA_FILENAME_POSTFIX: &str = "cache-metadata.json";
 
 impl FileCacheService {
 
@@ -53,7 +65,11 @@ impl FileCacheService {
     }
 
     /// Store `item` with cache `name` in `namespace`
-    pub fn store<'a>(&self, namespace: &str, name: &str, item: &impl Serialize) -> EmptyResult {
+    ///
+    /// - `ttl_secs` - cache time to live in seconds. `0` - immortal
+    pub fn store<'a>(&self, namespace: &str, name: &str, item: &impl Serialize,
+                     ttl_secs: u64) -> EmptyResult {
+
         info!("store entity '{}' into file cache", name);
 
         let cache_item_path = self.get_cache_item_path(&self.root_path, &self.instance_name, namespace);
@@ -64,7 +80,21 @@ impl FileCacheService {
 
         debug!("cache item path '{}'", &cache_item_path.display());
 
-        let filename = self.get_filename(name);
+        let metadata_filename = self.get_filename(
+            name, METADATA_FILENAME_POSTFIX);
+        let metadata_file_path = self.get_cache_file_path(&cache_item_path,
+                                                          &metadata_filename);
+        debug!("destination metadata file path '{}'", &metadata_file_path.display());
+        let now_unixtime = self.get_now_in_unixtime_secs()?;
+        let item_metadata: FileCacheItemMetadata = FileCacheItemMetadata {
+            ttl_secs,
+            created_unixtime: now_unixtime
+        };
+        let metadata_json = serde_json::to_string(&item_metadata)?;
+        fs::write(&metadata_file_path, metadata_json)?;
+        info!("cache item metadata has been created");
+
+        let filename = self.get_filename(name, CACHE_FILENAME_POSTFIX);
         let file_path = self.get_cache_file_path(&cache_item_path, &filename);
         debug!("destination file path '{}'", &file_path.display());
 
@@ -80,6 +110,18 @@ impl FileCacheService {
         Ok(())
     }
 
+    fn get_now_in_unixtime_secs(&self) -> OperationResult<u64> {
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(tm) => {
+                Ok(tm.as_secs())
+            }
+            Err(e) => {
+                error!("{}", e);
+                Err(FileCacheError::Default)
+            }
+        }
+    }
+
     /// Get (retrieve) item from cache by `name` and `namespace`
     pub fn get<'de, T: DeserializeOwned>(&self, namespace: &str, item_name: &str) -> OptionalResult<T> {
         info!("get entity from file cache: namespace='{}', item_name='{}'", namespace, item_name);
@@ -87,26 +129,55 @@ impl FileCacheService {
         let cache_item_path = self.get_cache_item_path(
             &self.root_path, &self.instance_name, namespace);
 
-        let filename = self.get_filename(item_name);
-        let file_path = self.get_cache_file_path(&cache_item_path, &filename);
+        let metadata_filename = self.get_filename(
+            item_name, METADATA_FILENAME_POSTFIX);
+        let metadata_file_path = self.get_cache_file_path(&cache_item_path,
+                                                          &metadata_filename);
+        debug!("destination metadata file path '{}'", &metadata_file_path.display());
 
-        if file_path.exists() {
-            let json = fs::read_to_string(&file_path)?;
+        if metadata_file_path.exists() {
 
-            match serde_json::from_str::<T>(&json) {
-                Ok(value) => {
-                    info!("entity '{}' has been loaded from file cache", item_name);
-                    Ok(Some(value))
+            let metadata_json = fs::read_to_string(&metadata_file_path)?;
+
+            let metadata = serde_json::from_str::<FileCacheItemMetadata>(&metadata_json)?;
+
+            let now_unixtime = self.get_now_in_unixtime_secs()?;
+
+            if now_unixtime > metadata.created_unixtime {
+                let diff_secs = now_unixtime - metadata.created_unixtime;
+
+                if metadata.ttl_secs > 0 && (diff_secs > metadata.ttl_secs) {
+                    info!("cache item '{}' has been expired and will be removed", item_name);
+                    return Ok(None)
                 }
-                Err(e) => {
-                    error!("couldn't deserialize cache item: {}", e);
-                    fs::remove_file(&file_path)?;
-                    Ok(None)
+
+            }
+
+            let filename = self.get_filename(item_name, CACHE_FILENAME_POSTFIX);
+            let file_path = self.get_cache_file_path(&cache_item_path, &filename);
+
+            if file_path.exists() {
+                let json = fs::read_to_string(&file_path)?;
+
+                match serde_json::from_str::<T>(&json) {
+                    Ok(value) => {
+                        info!("entity '{}' has been loaded from file cache", item_name);
+                        Ok(Some(value))
+                    }
+                    Err(e) => {
+                        error!("couldn't deserialize cache item: {}", e);
+                        fs::remove_file(&file_path)?;
+                        Ok(None)
+                    }
                 }
+
+            } else {
+                info!("file cache entity '{}' wasn't found", item_name);
+                Ok(None)
             }
 
         } else {
-            info!("file cache entity '{}' wasn't found", item_name);
+            info!("metadata file not found for item '{}', skip", item_name);
             Ok(None)
         }
     }
@@ -115,8 +186,8 @@ impl FileCacheService {
         Path::new(&root_path).join(&instance_name).join(&namespace)
     }
 
-    fn get_filename(&self, cache_item_name: &str) -> String {
-        format!("{}-{}-cache.json", self.instance_name, cache_item_name)
+    fn get_filename(&self, cache_item_name: &str, postfix: &str) -> String {
+        format!("{}-{}", cache_item_name, postfix)
     }
 
     fn get_cache_file_path(&self, cache_item_path: &PathBuf, cache_item_name: &str) -> PathBuf {
@@ -125,11 +196,136 @@ impl FileCacheService {
 }
 
 #[cfg(test)]
+mod ttl_tests {
+    use std::fs;
+    use std::path::Path;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    use fake::{Fake, Faker};
+    use serde::{Deserialize, Serialize};
+    use tempfile::tempdir;
+
+    use crate::service::{FileCacheService, METADATA_FILENAME_POSTFIX};
+
+    #[derive(Serialize, Deserialize, PartialEq, Debug)]
+    struct Demo {
+        pub login: String
+    }
+
+    #[test]
+    fn return_none_if_metadata_companion_file_is_missing() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
+
+        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_file = Path::new(&root_path_str)
+            .join(&instance_name)
+            .join(&namespace)
+            .join(metadata_filename);
+
+        fs::remove_file(metadata_file).unwrap();
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+    }
+
+    #[test]
+    fn return_item_with_existing_ttl() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
+
+        sleep(Duration::from_secs(1));
+
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+
+        assert_eq!(result, demo);
+    }
+
+    #[test]
+    fn return_none_for_item_with_expired_ttl() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 1).is_ok());
+
+        sleep(Duration::from_secs(3));
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+    }
+
+    #[test]
+    fn item_should_be_retrieved_with_zero_ttl() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 0).is_ok());
+
+        sleep(Duration::from_secs(1));
+
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+
+        assert_eq!(result, demo);
+    }
+
+    fn get_demo_entity() -> Demo {
+        Demo {  login: "Barry".to_string() }
+    }
+}
+
+#[cfg(test)]
 mod get_tests {
     use fake::{Fake, Faker};
-
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
+
     use crate::service::FileCacheService;
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -158,8 +354,9 @@ mod get_tests {
 #[cfg(test)]
 mod store_tests {
     use std::path::Path;
+
     use fake::{Fake, Faker};
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
@@ -185,7 +382,7 @@ mod store_tests {
 
         let demo = get_demo_entity();
 
-        assert!(service.store(&namespace, &name, &demo).is_ok());
+        assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
         let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
 
@@ -208,7 +405,7 @@ mod store_tests {
 
         let demo = get_demo_entity();
 
-        assert!(service.store(&namespace, &name, &demo).is_ok());
+        assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
         assert!(
             Path::new(&root_path_str)
@@ -234,13 +431,13 @@ mod store_tests {
 
         let first_item = get_demo_entity();
 
-        assert!(service.store(&namespace, &name, &first_item).is_ok());
+        assert!(service.store(&namespace, &name, &first_item, 0).is_ok());
 
         let second_item = Demo {
             login: "Gerry".to_string()
         };
 
-        assert!(service.store(&namespace, &name, &second_item).is_ok());
+        assert!(service.store(&namespace, &name, &second_item, 0).is_ok());
 
         assert!(
             Path::new(&root_path_str)
