@@ -110,18 +110,6 @@ impl FileCacheService {
         Ok(())
     }
 
-    fn get_now_in_unixtime_secs(&self) -> OperationResult<u64> {
-        match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(tm) => {
-                Ok(tm.as_secs())
-            }
-            Err(e) => {
-                error!("{}", e);
-                Err(FileCacheError::Default)
-            }
-        }
-    }
-
     /// Get (retrieve) item from cache by `name` and `namespace`
     pub fn get<'de, T: DeserializeOwned>(&self, namespace: &str, item_name: &str) -> OptionalResult<T> {
         info!("get entity from file cache: namespace='{}', item_name='{}'", namespace, item_name);
@@ -135,10 +123,11 @@ impl FileCacheService {
                                                           &metadata_filename);
         debug!("destination metadata file path '{}'", &metadata_file_path.display());
 
+        let filename = self.get_filename(item_name, CACHE_FILENAME_POSTFIX);
+        let file_path = self.get_cache_file_path(&cache_item_path, &filename);
+
         if metadata_file_path.exists() {
-
             let metadata_json = fs::read_to_string(&metadata_file_path)?;
-
             let metadata = serde_json::from_str::<FileCacheItemMetadata>(&metadata_json)?;
 
             let now_unixtime = self.get_now_in_unixtime_secs()?;
@@ -148,13 +137,16 @@ impl FileCacheService {
 
                 if metadata.ttl_secs > 0 && (diff_secs > metadata.ttl_secs) {
                     info!("cache item '{}' has been expired and will be removed", item_name);
+
+                    if file_path.exists() {
+                        fs::remove_file(file_path)?;
+                        fs::remove_file(metadata_file_path)?;
+                    }
+
                     return Ok(None)
                 }
 
             }
-
-            let filename = self.get_filename(item_name, CACHE_FILENAME_POSTFIX);
-            let file_path = self.get_cache_file_path(&cache_item_path, &filename);
 
             if file_path.exists() {
                 let json = fs::read_to_string(&file_path)?;
@@ -177,7 +169,10 @@ impl FileCacheService {
             }
 
         } else {
-            info!("metadata file not found for item '{}', skip", item_name);
+            info!("metadata file not found for item '{}', cache file will be removed", item_name);
+            if file_path.exists() {
+                fs::remove_file(file_path)?;
+            }
             Ok(None)
         }
     }
@@ -193,6 +188,16 @@ impl FileCacheService {
     fn get_cache_file_path(&self, cache_item_path: &PathBuf, cache_item_name: &str) -> PathBuf {
         cache_item_path.join(cache_item_name)
     }
+
+    fn get_now_in_unixtime_secs(&self) -> OperationResult<u64> {
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(tm) => Ok(tm.as_secs()),
+            Err(e) => {
+                error!("{}", e);
+                Err(FileCacheError::Default)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -206,11 +211,48 @@ mod ttl_tests {
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
-    use crate::service::{FileCacheService, METADATA_FILENAME_POSTFIX};
+    use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService, METADATA_FILENAME_POSTFIX};
 
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Demo {
         pub login: String
+    }
+
+    #[test]
+    fn delete_all_cache_item_file_if_metadata_is_missing() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
+
+        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_file = Path::new(&root_path_str)
+            .join(&instance_name)
+            .join(&namespace)
+            .join(metadata_filename);
+
+        fs::remove_file(metadata_file).unwrap();
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+
+        let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
+        let cache_item_file = Path::new(&root_path_str)
+            .join(&instance_name)
+            .join(&namespace)
+            .join(cache_item_filename);
+
+        assert!(!cache_item_file.exists());
     }
 
     #[test]
@@ -288,6 +330,45 @@ mod ttl_tests {
         sleep(Duration::from_secs(3));
 
         assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+    }
+
+    #[test]
+    fn remove_files_for_cache_item_with_expired_ttl() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 1).is_ok());
+
+        sleep(Duration::from_secs(3));
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+
+        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_file = Path::new(&root_path_str)
+            .join(&instance_name)
+            .join(&namespace)
+            .join(metadata_filename);
+
+        assert!(!metadata_file.exists());
+
+        let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
+        let cache_item_file = Path::new(&root_path_str)
+            .join(&instance_name)
+            .join(&namespace)
+            .join(cache_item_filename);
+
+        assert!(!cache_item_file.exists());
     }
 
     #[test]
