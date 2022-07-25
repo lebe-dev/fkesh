@@ -52,6 +52,7 @@ impl FileCacheService {
         })
     }
 
+    /// Store `item` with cache `name` in `namespace`
     pub fn store<'a>(&self, namespace: &str, name: &str, item: &impl Serialize) -> EmptyResult {
         info!("store entity '{}' into file cache", name);
 
@@ -79,6 +80,7 @@ impl FileCacheService {
         Ok(())
     }
 
+    /// Get (retrieve) item from cache by `name` and `namespace`
     pub fn get<'de, T: DeserializeOwned>(&self, namespace: &str, item_name: &str) -> OptionalResult<T> {
         info!("get entity from file cache: namespace='{}', item_name='{}'", namespace, item_name);
 
