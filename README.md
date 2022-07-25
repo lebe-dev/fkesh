@@ -59,3 +59,7 @@ match service.get(&namespace, "chappy")? {
 [CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache.json
 [CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache-metadata.json
 ```
+
+## Future plans:
+
+- Thread safe
