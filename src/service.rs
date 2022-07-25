@@ -50,6 +50,15 @@ impl FileCacheService {
 
     pub fn store<'a>(&self, namespace: &str, name: &str, item: &impl Serialize) -> EmptyResult {
         info!("store entity '{}' into file cache", name);
+
+        let cache_item_path = self.get_cache_item_path(&self.root_path, &self.instance_name, namespace);
+
+        if !cache_item_path.exists() {
+            fs::create_dir_all(&cache_item_path)?;
+        }
+
+        debug!("cache item path '{}'", &cache_item_path.display());
+
         let filename = self.get_filename(name);
         let file_path = self.get_cache_file_path(&filename);
         debug!("destination file path '{}'", &file_path.display());
@@ -93,6 +102,10 @@ impl FileCacheService {
         }
     }
 
+    fn get_cache_item_path(&self, root_path: &str, instance_name: &str, namespace: &str) -> PathBuf {
+        Path::new(&root_path).join(&instance_name).join(&namespace)
+    }
+
     fn get_filename(&self, cache_item_name: &str) -> String {
         format!("{}-{}-cache.json", self.instance_name, cache_item_name)
     }
@@ -104,6 +117,7 @@ impl FileCacheService {
 
 #[cfg(test)]
 mod store_tests {
+    use std::path::Path;
     use fake::{Fake, Faker};
     use serde::Serialize;
     use tempfile::tempdir;
@@ -134,6 +148,13 @@ mod store_tests {
         };
 
         assert!(service.store(&namespace, &name, &demo).is_ok());
+
+        assert!(
+            Path::new(&root_path_str)
+                .join(instance_name)
+                .join(namespace)
+                .exists()
+        );
     }
 }
 
