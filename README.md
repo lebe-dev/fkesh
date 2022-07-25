@@ -28,10 +28,18 @@ let service = FileCacheService::new("/opt/myapp/cache", "demo-instance")?;
 
 let namespace = "demo";
 
-// Struct will be stored in `/opt/myapp/cache/demo-instance/demo/chappy-cache.json` file as:
+// Entity will be stored in:
+// - `/opt/myapp/cache/demo-instance/demo/chappy-cache-metadata.json` file as:
+// {
+//   "ttl_secs": 10000,
+//   "created_unixtime": 1658774583
+// }
+//
+// - `/opt/myapp/cache/demo-instance/demo/chappy-cache.json` file as:
 // {
 //   "name": "Chappy"
 // }
+//
 service.store(&namespace, "chappy", &chappy, 10000)?;
 
 match service.get(&namespace, "chappy")? {
@@ -49,4 +57,5 @@ match service.get(&namespace, "chappy")? {
 
 ```
 [CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache.json
+[CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache-metadata.json
 ```
