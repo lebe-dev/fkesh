@@ -177,9 +177,7 @@ mod store_tests {
         let namespace = Faker.fake::<String>();
         let name = Faker.fake::<String>();
 
-        let demo = Demo {
-            login: "Jerry".to_string()
-        };
+        let demo = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &demo).is_ok());
 
@@ -202,9 +200,7 @@ mod store_tests {
         let namespace = Faker.fake::<String>();
         let name = Faker.fake::<String>();
 
-        let demo = Demo {
-            login: "Jerry".to_string()
-        };
+        let demo = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &demo).is_ok());
 
@@ -230,9 +226,7 @@ mod store_tests {
         let namespace = Faker.fake::<String>();
         let name = Faker.fake::<String>();
 
-        let first_item = Demo {
-            login: "Jerry".to_string()
-        };
+        let first_item = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &first_item).is_ok());
 
@@ -248,6 +242,10 @@ mod store_tests {
                 .join(namespace)
                 .exists()
         );
+    }
+
+    fn get_demo_entity() -> Demo {
+        Demo {  login: "Jerry".to_string() }
     }
 }
 
