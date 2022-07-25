@@ -215,6 +215,40 @@ mod store_tests {
                 .exists()
         );
     }
+
+    #[test]
+    fn previous_cache_item_file_should_be_overwritten() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        let first_item = Demo {
+            login: "Jerry".to_string()
+        };
+
+        assert!(service.store(&namespace, &name, &first_item).is_ok());
+
+        let second_item = Demo {
+            login: "Gerry".to_string()
+        };
+
+        assert!(service.store(&namespace, &name, &second_item).is_ok());
+
+        assert!(
+            Path::new(&root_path_str)
+                .join(instance_name)
+                .join(namespace)
+                .exists()
+        );
+    }
 }
 
 #[cfg(test)]
