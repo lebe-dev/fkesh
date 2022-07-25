@@ -43,12 +43,8 @@ let namespace = "demo";
 service.store(&namespace, "chappy", &chappy, 10000)?;
 
 match service.get(&namespace, "chappy")? {
-    Some(value) => {
-        println!("Chappy is here!")
-    }
-    None => {
-        eprintln!("Chappy wasn't found :(")
-    }
+    Some(value) => println!("Chappy is here!"),
+    None => eprintln!("Chappy wasn't found :(")
 }
 
 ```
