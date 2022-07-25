@@ -32,7 +32,7 @@ let namespace = "demo";
 // {
 //   "name": "Chappy"
 // }
-service.store(&namespace, "chappy", &chappy)?;
+service.store(&namespace, "chappy", &chappy, 10000)?;
 
 match service.get(&namespace, "chappy")? {
     Some(value) => {
