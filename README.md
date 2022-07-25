@@ -24,10 +24,14 @@ let chappy = Dog {
     name: "Chappy".to_string();
 };
 
-let service = FileCacheService::new("path/to/cache", "demo-instance")?;
+let service = FileCacheService::new("/opt/myapp/cache", "demo-instance")?;
 
 let namespace = "demo";
 
+// Struct will be stored in `/opt/myapp/cache/demo-instance/demo/chappy-cache.json` file as:
+// {
+//   "name": "Chappy"
+// }
 service.store(&namespace, "chappy", &chappy)?;
 
 match service.get(&namespace, "chappy")? {
