@@ -49,6 +49,11 @@ match service.get(&namespace, "chappy")? {
 
 ```
 
+## Cache live time (TTL)
+
+- `0` - TTL is disabled
+- `12345` - TTL in seconds
+
 ## Storage: file hierarchy
 
 ```
