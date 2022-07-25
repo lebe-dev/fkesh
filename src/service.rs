@@ -119,6 +119,37 @@ impl FileCacheService {
 }
 
 #[cfg(test)]
+mod get_tests {
+    use fake::{Fake, Faker};
+
+    use serde::{Serialize, Deserialize};
+    use tempfile::tempdir;
+    use crate::service::FileCacheService;
+
+    #[derive(Serialize, Deserialize, PartialEq, Debug)]
+    struct Demo {
+        pub login: String
+    }
+
+    #[test]
+    fn return_none_for_unknown_cache_item() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = format!("{}", root_path.display());
+
+        let instance_name = Faker.fake::<String>();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = Faker.fake::<String>();
+        let name = Faker.fake::<String>();
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
 mod store_tests {
     use std::path::Path;
     use fake::{Fake, Faker};
