@@ -14,7 +14,7 @@ use crate::types::{EmptyResult, OperationResult, OptionalResult};
 ///
 /// ## Storage hierarchy:
 ///
-/// `[CACHE BASE DIR]/[CACHE NAME]/[NAMESPACE]/[ITEM-NAME]-cache.json`
+/// `[CACHE BASE DIR]/[INSTANCE NAME]/[NAMESPACE]/[ITEM-NAME]-cache.json`
 ///
 /// ## Storage format
 ///
@@ -29,6 +29,10 @@ pub struct FileCacheService {
 
 impl FileCacheService {
 
+    /// Create instance of FileCacheService
+    ///
+    /// - `root_path` - root path to cache directory (will be created if doesn't exist)
+    /// - `cache_instance_name` - name of current service, included in file hierarchy
     pub fn new(root_path: &str, cache_instance_name: &str) -> OperationResult<FileCacheService> {
         info!("create file cache service, root path '{}', cache name '{}'",
             root_path, cache_instance_name);
