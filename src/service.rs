@@ -49,19 +49,28 @@ impl FileCacheService {
         info!("create file cache service, root path '{}', cache name '{}'",
             root_path, cache_instance_name);
 
-        let cache_root_path = Path::new(root_path);
+        if !root_path.is_empty() && !cache_instance_name.is_empty() {
 
-        if !cache_root_path.exists() {
-            fs::create_dir_all(cache_root_path)?;
-            info!("root path has been created for file cache service '{}'",
+            let cache_root_path = Path::new(root_path);
+
+            if !cache_root_path.exists() {
+                fs::create_dir_all(cache_root_path)?;
+                info!("root path has been created for file cache service '{}'",
                 cache_root_path.display());
-        }
+            }
 
-        Ok(
-            FileCacheService {
-            root_path: root_path.to_string(),
-            instance_name: cache_instance_name.to_string()
-        })
+            Ok(
+                FileCacheService {
+                    root_path: root_path.to_string(),
+                    instance_name: cache_instance_name.to_string()
+                })
+
+        } else {
+            error!("root path and cache instance name cannot be blank:");
+            error!("- root path '{}'", root_path);
+            error!("- cache instance name '{}'", cache_instance_name);
+            Err(FileCacheError::Default)
+        }
     }
 
     /// Store `item` with cache `name` in `namespace`
@@ -556,4 +565,22 @@ mod new_tests {
 
         assert!(root_path.exists());
     }
+
+    #[test]
+    fn return_error_for_blank_root_path() {
+        assert!(FileCacheService::new("", "whatever").is_err());
+    }
+
+    #[test]
+    fn return_error_for_blank_instance_name() {
+        let tmp_dir = tempdir().unwrap();
+        let root_path = tmp_dir.path();
+        let root_path_str = format!("{}", root_path.display());
+        assert!(FileCacheService::new(&root_path_str, "").is_err());
+    }
+}
+
+#[cfg(test)]
+mod negative_tests {
+
 }
