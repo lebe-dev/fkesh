@@ -130,43 +130,56 @@ impl FileCacheService {
 
         if metadata_file_path.exists() {
             let metadata_json = fs::read_to_string(&metadata_file_path)?;
-            let metadata = serde_json::from_str::<FileCacheItemMetadata>(&metadata_json)?;
 
-            let now_unixtime = self.get_now_in_unixtime_secs()?;
+            match serde_json::from_str::<FileCacheItemMetadata>(&metadata_json) {
+                Ok(metadata) => {
+                    let now_unixtime = self.get_now_in_unixtime_secs()?;
 
-            if now_unixtime > metadata.created_unixtime {
-                let diff_secs = now_unixtime - metadata.created_unixtime;
+                    if now_unixtime > metadata.created_unixtime {
+                        let diff_secs = now_unixtime - metadata.created_unixtime;
 
-                if metadata.ttl_secs > 0 && (diff_secs > metadata.ttl_secs) {
-                    info!("cache item '{}' has been expired and will be removed", item_name.as_ref());
+                        if metadata.ttl_secs > 0 && (diff_secs > metadata.ttl_secs) {
+                            info!("cache item '{}' has been expired and will be removed", item_name.as_ref());
+
+                            if file_path.exists() {
+                                fs::remove_file(file_path)?;
+                                fs::remove_file(metadata_file_path)?;
+                            }
+
+                            return Ok(None);
+                        }
+                    }
 
                     if file_path.exists() {
-                        fs::remove_file(file_path)?;
-                        fs::remove_file(metadata_file_path)?;
-                    }
+                        let json = fs::read_to_string(&file_path)?;
 
-                    return Ok(None);
-                }
-            }
-
-            if file_path.exists() {
-                let json = fs::read_to_string(&file_path)?;
-
-                match serde_json::from_str::<T>(&json) {
-                    Ok(value) => {
-                        info!("entity '{}' has been loaded from file cache", item_name.as_ref());
-                        Ok(Some(value))
-                    }
-                    Err(e) => {
-                        error!("couldn't deserialize cache item: {}", e);
-                        fs::remove_file(&file_path)?;
+                        match serde_json::from_str::<T>(&json) {
+                            Ok(value) => {
+                                info!("entity '{}' has been loaded from file cache", item_name.as_ref());
+                                Ok(Some(value))
+                            }
+                            Err(e) => {
+                                error!("couldn't deserialize cache item: {}", e);
+                                fs::remove_file(&file_path)?;
+                                fs::remove_file(&metadata_file_path)?;
+                                Ok(None)
+                            }
+                        }
+                    } else {
+                        info!("file cache entity '{}' wasn't found", item_name.as_ref());
                         Ok(None)
                     }
+                },
+                Err(e) => {
+                    error!("corrupted metadata file: {}", e);
+                    if file_path.exists() {
+                        fs::remove_file(&metadata_file_path)?;
+                        fs::remove_file(&file_path)?;
+                    }
+                    Ok(None)
                 }
-            } else {
-                info!("file cache entity '{}' wasn't found", item_name.as_ref());
-                Ok(None)
             }
+
         } else {
             info!("metadata file not found for item '{}', cache file will be removed", item_name.as_ref());
             if file_path.exists() {
@@ -548,11 +561,11 @@ mod corrupted_data_tests {
     use non_blank_string_rs::utils::get_random_nonblank_string;
     use tempfile::tempdir;
 
-    use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService};
+    use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService, METADATA_FILENAME_POSTFIX};
     use crate::tests::{Demo, get_demo_entity};
 
     #[test]
-    fn return_none_for_corrupted_item_content() {
+    fn corrupted_metadata_file_should_be_removed_with_cache_file_companion() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -569,14 +582,61 @@ mod corrupted_data_tests {
 
         assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
+        let metadata_filename = format!("{}-{}", name.as_ref(), METADATA_FILENAME_POSTFIX);
+
+        let metadata_item_path = Path::new(root_path_str.as_ref())
+            .join(instance_name.as_ref())
+            .join(namespace.as_ref()).join(metadata_filename);
+
+        let filename = format!("{}-{}", name.as_ref(), CACHE_FILENAME_POSTFIX);
+
+        let cache_item_path = Path::new(root_path_str.as_ref())
+            .join(instance_name.as_ref())
+            .join(namespace.as_ref()).join(filename);
+
+        fs::write(&metadata_item_path, "invalid-json-data").unwrap();
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+
+        assert!(!metadata_item_path.exists());
+        assert!(!cache_item_path.exists());
+    }
+
+    #[test]
+    fn corrupted_cache_file_should_be_removed_with_metadata_file_companion() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
+
+        let instance_name = get_random_nonblank_string();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 0).is_ok());
+
+        let metadata_filename = format!("{}-{}", name.as_ref(), METADATA_FILENAME_POSTFIX);
+
+        let metadata_item_path = Path::new(root_path_str.as_ref())
+            .join(instance_name.as_ref())
+            .join(namespace.as_ref()).join(metadata_filename);
+
         let filename = format!("{}-{}", name.as_ref(), CACHE_FILENAME_POSTFIX);
 
         let cache_item_path = Path::new(root_path_str.as_ref())
                                         .join(instance_name.as_ref())
                                         .join(namespace.as_ref()).join(filename);
 
-        fs::write(cache_item_path, "invalid-json-data").unwrap();
+        fs::write(&cache_item_path, "invalid-json-data").unwrap();
 
         assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+
+        assert!(!metadata_item_path.exists());
+        assert!(!cache_item_path.exists());
     }
 }
