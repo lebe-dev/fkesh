@@ -46,9 +46,10 @@ impl FileCacheService {
     ///
     /// - `root_path` - root path to cache directory (will be created if doesn't exist)
     /// - `cache_instance_name` - name of current service, included in file hierarchy
-    pub fn new(root_path: &NonBlankString, cache_instance_name: &NonBlankString) -> OperationResult<FileCacheService> {
+    pub fn new(root_path: &NonBlankString,
+               instance_name: &NonBlankString) -> OperationResult<FileCacheService> {
         info!("create file cache service, root path '{}', cache name '{}'",
-            root_path.as_ref(), cache_instance_name.as_ref());
+            root_path.as_ref(), instance_name.as_ref());
 
         let cache_root_path = Path::new(root_path.as_ref());
 
@@ -61,7 +62,7 @@ impl FileCacheService {
         Ok(
             FileCacheService {
                 root_path: root_path.as_ref().to_string(),
-                instance_name: cache_instance_name.as_ref().to_string()
+                instance_name: instance_name.as_ref().to_string()
             }
         )
     }
@@ -71,10 +72,9 @@ impl FileCacheService {
     /// - `ttl_secs` - cache time to live in seconds. `0` - immortal
     pub fn store<'a>(&self, namespace: &NonBlankString, name: &NonBlankString, item: &impl Serialize,
                      ttl_secs: u64) -> EmptyResult {
-
         info!("store entity '{}' into file cache", name.as_ref());
-
-        let cache_item_path = self.get_cache_item_path(&self.root_path, &self.instance_name, namespace.as_ref());
+        let cache_item_path = self.get_cache_item_path(
+            &self.root_path, &self.instance_name, namespace.as_ref());
 
         if !cache_item_path.exists() {
             fs::create_dir_all(&cache_item_path)?;
