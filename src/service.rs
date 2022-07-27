@@ -69,12 +69,12 @@ impl FileCacheService {
     /// Store `item` with cache `name` in `namespace`
     ///
     /// - `ttl_secs` - cache time to live in seconds. `0` - immortal
-    pub fn store<'a>(&self, namespace: &str, name: &str, item: &impl Serialize,
+    pub fn store<'a>(&self, namespace: &NonBlankString, name: &NonBlankString, item: &impl Serialize,
                      ttl_secs: u64) -> EmptyResult {
 
-        info!("store entity '{}' into file cache", name);
+        info!("store entity '{}' into file cache", name.as_ref());
 
-        let cache_item_path = self.get_cache_item_path(&self.root_path, &self.instance_name, namespace);
+        let cache_item_path = self.get_cache_item_path(&self.root_path, &self.instance_name, namespace.as_ref());
 
         if !cache_item_path.exists() {
             fs::create_dir_all(&cache_item_path)?;
@@ -83,7 +83,7 @@ impl FileCacheService {
         debug!("cache item path '{}'", &cache_item_path.display());
 
         let metadata_filename = self.get_filename(
-            name, METADATA_FILENAME_POSTFIX);
+            name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file_path = self.get_cache_file_path(&cache_item_path,
                                                           &metadata_filename);
         debug!("destination metadata file path '{}'", &metadata_file_path.display());
@@ -96,7 +96,7 @@ impl FileCacheService {
         fs::write(&metadata_file_path, metadata_json)?;
         info!("cache item metadata has been created");
 
-        let filename = self.get_filename(name, CACHE_FILENAME_POSTFIX);
+        let filename = self.get_filename(name.as_ref(), CACHE_FILENAME_POSTFIX);
         let file_path = self.get_cache_file_path(&cache_item_path, &filename);
         debug!("destination file path '{}'", &file_path.display());
 
@@ -108,7 +108,7 @@ impl FileCacheService {
 
         fs::write(&file_path, json)?;
 
-        info!("item '{}' has been saved into file cache", name);
+        info!("item '{}' has been saved into file cache", name.as_ref());
         Ok(())
     }
 
@@ -209,7 +209,6 @@ mod ttl_tests {
     use std::thread::sleep;
     use std::time::Duration;
 
-    use fake::{Fake, Faker};
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
@@ -233,27 +232,27 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
 
-        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_filename = format!("{}-{}", &name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file = Path::new(&root_path_str.as_ref())
             .join(&instance_name.as_ref())
-            .join(&namespace)
+            .join(&namespace.as_ref())
             .join(metadata_filename);
 
         fs::remove_file(metadata_file).unwrap();
 
-        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
 
-        let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
+        let cache_item_filename = format!("{}-{}", &name.as_ref(), CACHE_FILENAME_POSTFIX);
         let cache_item_file = Path::new(&root_path_str.as_ref())
             .join(&instance_name.as_ref())
-            .join(&namespace)
+            .join(&namespace.as_ref())
             .join(cache_item_filename);
 
         assert!(!cache_item_file.exists());
@@ -270,22 +269,22 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
 
-        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_filename = format!("{}-{}", &name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file = Path::new(&root_path_str.as_ref())
             .join(&instance_name.as_ref())
-            .join(&namespace)
+            .join(&namespace.as_ref())
             .join(metadata_filename);
 
         fs::remove_file(metadata_file).unwrap();
 
-        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
     }
 
     #[test]
@@ -299,8 +298,8 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
@@ -308,7 +307,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(1));
 
-        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
@@ -324,8 +323,8 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
@@ -333,7 +332,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(3));
 
-        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
     }
 
     #[test]
@@ -347,8 +346,8 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
@@ -356,20 +355,20 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(3));
 
-        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
 
-        let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
+        let metadata_filename = format!("{}-{}", &name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file = Path::new(&root_path_str.as_ref())
             .join(&instance_name.as_ref())
-            .join(&namespace)
+            .join(&namespace.as_ref())
             .join(metadata_filename);
 
         assert!(!metadata_file.exists());
 
-        let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
+        let cache_item_filename = format!("{}-{}", &name.as_ref(), CACHE_FILENAME_POSTFIX);
         let cache_item_file = Path::new(&root_path_str.as_ref())
             .join(&instance_name.as_ref())
-            .join(&namespace)
+            .join(&namespace.as_ref())
             .join(cache_item_filename);
 
         assert!(!cache_item_file.exists());
@@ -386,8 +385,8 @@ mod ttl_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
@@ -395,7 +394,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(1));
 
-        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
@@ -407,7 +406,6 @@ mod ttl_tests {
 
 #[cfg(test)]
 mod get_tests {
-    use fake::{Fake, Faker};
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
@@ -431,10 +429,10 @@ mod get_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
-        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
     }
 }
 
@@ -442,7 +440,6 @@ mod get_tests {
 mod store_tests {
     use std::path::Path;
 
-    use fake::{Fake, Faker};
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
@@ -466,14 +463,14 @@ mod store_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
-        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
@@ -489,8 +486,8 @@ mod store_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let demo = get_demo_entity();
 
@@ -499,7 +496,7 @@ mod store_tests {
         assert!(
             Path::new(&root_path_str.as_ref())
                 .join(instance_name.as_ref())
-                .join(namespace)
+                .join(namespace.as_ref())
                 .exists()
         );
     }
@@ -515,8 +512,8 @@ mod store_tests {
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
 
-        let namespace = Faker.fake::<String>();
-        let name = Faker.fake::<String>();
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
 
         let first_item = get_demo_entity();
 
@@ -531,7 +528,7 @@ mod store_tests {
         assert!(
             Path::new(&root_path_str.as_ref())
                 .join(instance_name.as_ref())
-                .join(namespace)
+                .join(namespace.as_ref())
                 .exists()
         );
     }
