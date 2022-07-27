@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::{debug, error, info};
+use non_blank_string_rs::NonBlankString;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
@@ -45,32 +46,24 @@ impl FileCacheService {
     ///
     /// - `root_path` - root path to cache directory (will be created if doesn't exist)
     /// - `cache_instance_name` - name of current service, included in file hierarchy
-    pub fn new(root_path: &str, cache_instance_name: &str) -> OperationResult<FileCacheService> {
+    pub fn new(root_path: &NonBlankString, cache_instance_name: &NonBlankString) -> OperationResult<FileCacheService> {
         info!("create file cache service, root path '{}', cache name '{}'",
-            root_path, cache_instance_name);
+            root_path.as_ref(), cache_instance_name.as_ref());
 
-        if !root_path.is_empty() && !cache_instance_name.is_empty() {
+        let cache_root_path = Path::new(root_path.as_ref());
 
-            let cache_root_path = Path::new(root_path);
-
-            if !cache_root_path.exists() {
-                fs::create_dir_all(cache_root_path)?;
-                info!("root path has been created for file cache service '{}'",
+        if !cache_root_path.exists() {
+            fs::create_dir_all(cache_root_path)?;
+            info!("root path has been created for file cache service '{}'",
                 cache_root_path.display());
-            }
-
-            Ok(
-                FileCacheService {
-                    root_path: root_path.to_string(),
-                    instance_name: cache_instance_name.to_string()
-                })
-
-        } else {
-            error!("root path and cache instance name cannot be blank:");
-            error!("- root path '{}'", root_path);
-            error!("- cache instance name '{}'", cache_instance_name);
-            Err(FileCacheError::Default)
         }
+
+        Ok(
+            FileCacheService {
+                root_path: root_path.as_ref().to_string(),
+                instance_name: cache_instance_name.as_ref().to_string()
+            }
+        )
     }
 
     /// Store `item` with cache `name` in `namespace`
@@ -217,6 +210,8 @@ mod ttl_tests {
     use std::time::Duration;
 
     use fake::{Fake, Faker};
+    use non_blank_string_rs::NonBlankString;
+    use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
@@ -231,9 +226,9 @@ mod ttl_tests {
     fn delete_all_cache_item_file_if_metadata_is_missing() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -246,8 +241,8 @@ mod ttl_tests {
         assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
 
         let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
-        let metadata_file = Path::new(&root_path_str)
-            .join(&instance_name)
+        let metadata_file = Path::new(&root_path_str.as_ref())
+            .join(&instance_name.as_ref())
             .join(&namespace)
             .join(metadata_filename);
 
@@ -256,8 +251,8 @@ mod ttl_tests {
         assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
 
         let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
-        let cache_item_file = Path::new(&root_path_str)
-            .join(&instance_name)
+        let cache_item_file = Path::new(&root_path_str.as_ref())
+            .join(&instance_name.as_ref())
             .join(&namespace)
             .join(cache_item_filename);
 
@@ -268,9 +263,9 @@ mod ttl_tests {
     fn return_none_if_metadata_companion_file_is_missing() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -283,8 +278,8 @@ mod ttl_tests {
         assert!(service.store(&namespace, &name, &demo, 1000).is_ok());
 
         let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
-        let metadata_file = Path::new(&root_path_str)
-            .join(&instance_name)
+        let metadata_file = Path::new(&root_path_str.as_ref())
+            .join(&instance_name.as_ref())
             .join(&namespace)
             .join(metadata_filename);
 
@@ -297,9 +292,9 @@ mod ttl_tests {
     fn return_item_with_existing_ttl() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -322,9 +317,9 @@ mod ttl_tests {
     fn return_none_for_item_with_expired_ttl() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -345,9 +340,9 @@ mod ttl_tests {
     fn remove_files_for_cache_item_with_expired_ttl() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -364,16 +359,16 @@ mod ttl_tests {
         assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
 
         let metadata_filename = format!("{}-{}", &name, METADATA_FILENAME_POSTFIX);
-        let metadata_file = Path::new(&root_path_str)
-            .join(&instance_name)
+        let metadata_file = Path::new(&root_path_str.as_ref())
+            .join(&instance_name.as_ref())
             .join(&namespace)
             .join(metadata_filename);
 
         assert!(!metadata_file.exists());
 
         let cache_item_filename = format!("{}-{}", &name, CACHE_FILENAME_POSTFIX);
-        let cache_item_file = Path::new(&root_path_str)
-            .join(&instance_name)
+        let cache_item_file = Path::new(&root_path_str.as_ref())
+            .join(&instance_name.as_ref())
             .join(&namespace)
             .join(cache_item_filename);
 
@@ -384,9 +379,9 @@ mod ttl_tests {
     fn item_should_be_retrieved_with_zero_ttl() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -413,6 +408,8 @@ mod ttl_tests {
 #[cfg(test)]
 mod get_tests {
     use fake::{Fake, Faker};
+    use non_blank_string_rs::NonBlankString;
+    use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
@@ -427,9 +424,9 @@ mod get_tests {
     fn return_none_for_unknown_cache_item() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -446,6 +443,8 @@ mod store_tests {
     use std::path::Path;
 
     use fake::{Fake, Faker};
+    use non_blank_string_rs::NonBlankString;
+    use non_blank_string_rs::utils::get_random_nonblank_string;
     use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
@@ -460,9 +459,9 @@ mod store_tests {
     fn store_and_get() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -483,9 +482,9 @@ mod store_tests {
     fn directory_hierarchy_should_be_created() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -498,8 +497,8 @@ mod store_tests {
         assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
         assert!(
-            Path::new(&root_path_str)
-                .join(instance_name)
+            Path::new(&root_path_str.as_ref())
+                .join(instance_name.as_ref())
                 .join(namespace)
                 .exists()
         );
@@ -509,9 +508,9 @@ mod store_tests {
     fn previous_cache_item_file_should_be_overwritten() {
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        let instance_name = Faker.fake::<String>();
+        let instance_name = get_random_nonblank_string();
 
         let service = FileCacheService::new(
             &root_path_str, &instance_name).unwrap();
@@ -530,8 +529,8 @@ mod store_tests {
         assert!(service.store(&namespace, &name, &second_item, 0).is_ok());
 
         assert!(
-            Path::new(&root_path_str)
-                .join(instance_name)
+            Path::new(&root_path_str.as_ref())
+                .join(instance_name.as_ref())
                 .join(namespace)
                 .exists()
         );
@@ -546,6 +545,8 @@ mod store_tests {
 mod new_tests {
     use std::fs;
 
+    use non_blank_string_rs::NonBlankString;
+    use non_blank_string_rs::utils::get_random_nonblank_string;
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
@@ -559,28 +560,12 @@ mod new_tests {
 
         assert!(!root_path.exists());
 
-        let root_path_str = format!("{}", root_path.display());
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
 
-        FileCacheService::new(&root_path_str, "whatever").unwrap();
+        let instance_name = get_random_nonblank_string();
+
+        FileCacheService::new(&root_path_str, &instance_name).unwrap();
 
         assert!(root_path.exists());
     }
-
-    #[test]
-    fn return_error_for_blank_root_path() {
-        assert!(FileCacheService::new("", "whatever").is_err());
-    }
-
-    #[test]
-    fn return_error_for_blank_instance_name() {
-        let tmp_dir = tempdir().unwrap();
-        let root_path = tmp_dir.path();
-        let root_path_str = format!("{}", root_path.display());
-        assert!(FileCacheService::new(&root_path_str, "").is_err());
-    }
-}
-
-#[cfg(test)]
-mod negative_tests {
-
 }
