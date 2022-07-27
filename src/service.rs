@@ -113,19 +113,20 @@ impl FileCacheService {
     }
 
     /// Get (retrieve) item from cache by `name` and `namespace`
-    pub fn get<'de, T: DeserializeOwned>(&self, namespace: &str, item_name: &str) -> OptionalResult<T> {
-        info!("get entity from file cache: namespace='{}', item_name='{}'", namespace, item_name);
+    pub fn get<'de, T: DeserializeOwned>(&self, namespace: &NonBlankString,
+                                         item_name: &NonBlankString) -> OptionalResult<T> {
+        info!("get entity from file cache: namespace='{}', item_name='{}'", namespace.as_ref(), item_name.as_ref());
 
         let cache_item_path = self.get_cache_item_path(
-            &self.root_path, &self.instance_name, namespace);
+            &self.root_path, &self.instance_name, namespace.as_ref());
 
         let metadata_filename = self.get_filename(
-            item_name, METADATA_FILENAME_POSTFIX);
+            item_name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file_path = self.get_cache_file_path(&cache_item_path,
                                                           &metadata_filename);
         debug!("destination metadata file path '{}'", &metadata_file_path.display());
 
-        let filename = self.get_filename(item_name, CACHE_FILENAME_POSTFIX);
+        let filename = self.get_filename(item_name.as_ref(), CACHE_FILENAME_POSTFIX);
         let file_path = self.get_cache_file_path(&cache_item_path, &filename);
 
         if metadata_file_path.exists() {
@@ -138,7 +139,7 @@ impl FileCacheService {
                 let diff_secs = now_unixtime - metadata.created_unixtime;
 
                 if metadata.ttl_secs > 0 && (diff_secs > metadata.ttl_secs) {
-                    info!("cache item '{}' has been expired and will be removed", item_name);
+                    info!("cache item '{}' has been expired and will be removed", item_name.as_ref());
 
                     if file_path.exists() {
                         fs::remove_file(file_path)?;
@@ -155,7 +156,7 @@ impl FileCacheService {
 
                 match serde_json::from_str::<T>(&json) {
                     Ok(value) => {
-                        info!("entity '{}' has been loaded from file cache", item_name);
+                        info!("entity '{}' has been loaded from file cache", item_name.as_ref());
                         Ok(Some(value))
                     }
                     Err(e) => {
@@ -166,12 +167,12 @@ impl FileCacheService {
                 }
 
             } else {
-                info!("file cache entity '{}' wasn't found", item_name);
+                info!("file cache entity '{}' wasn't found", item_name.as_ref());
                 Ok(None)
             }
 
         } else {
-            info!("metadata file not found for item '{}', cache file will be removed", item_name);
+            info!("metadata file not found for item '{}', cache file will be removed", item_name.as_ref());
             if file_path.exists() {
                 fs::remove_file(file_path)?;
             }
@@ -247,7 +248,7 @@ mod ttl_tests {
 
         fs::remove_file(metadata_file).unwrap();
 
-        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
 
         let cache_item_filename = format!("{}-{}", &name.as_ref(), CACHE_FILENAME_POSTFIX);
         let cache_item_file = Path::new(&root_path_str.as_ref())
@@ -284,7 +285,7 @@ mod ttl_tests {
 
         fs::remove_file(metadata_file).unwrap();
 
-        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
     }
 
     #[test]
@@ -307,7 +308,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(1));
 
-        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
@@ -332,7 +333,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(3));
 
-        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
     }
 
     #[test]
@@ -355,7 +356,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(3));
 
-        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
 
         let metadata_filename = format!("{}-{}", &name.as_ref(), METADATA_FILENAME_POSTFIX);
         let metadata_file = Path::new(&root_path_str.as_ref())
@@ -394,7 +395,7 @@ mod ttl_tests {
 
         sleep(Duration::from_secs(1));
 
-        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
@@ -432,7 +433,7 @@ mod get_tests {
         let namespace = get_random_nonblank_string();
         let name = get_random_nonblank_string();
 
-        assert!(service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().is_none());
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
     }
 }
 
@@ -470,7 +471,7 @@ mod store_tests {
 
         assert!(service.store(&namespace, &name, &demo, 0).is_ok());
 
-        let result = service.get::<Demo>(&namespace.as_ref(), &name.as_ref()).unwrap().unwrap();
+        let result = service.get::<Demo>(&namespace, &name).unwrap().unwrap();
 
         assert_eq!(result, demo);
     }
