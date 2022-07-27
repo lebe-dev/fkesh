@@ -28,20 +28,19 @@ pub struct FileCacheService {
     /// Path to cache directory
     root_path: String,
 
-    instance_name: String
+    instance_name: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FileCacheItemMetadata {
     pub ttl_secs: u64,
-    pub created_unixtime: u64
+    pub created_unixtime: u64,
 }
 
 pub const CACHE_FILENAME_POSTFIX: &str = "cache.json";
 pub const METADATA_FILENAME_POSTFIX: &str = "cache-metadata.json";
 
 impl FileCacheService {
-
     /// Create instance of FileCacheService
     ///
     /// - `root_path` - root path to cache directory (will be created if doesn't exist)
@@ -62,7 +61,7 @@ impl FileCacheService {
         Ok(
             FileCacheService {
                 root_path: root_path.as_ref().to_string(),
-                instance_name: instance_name.as_ref().to_string()
+                instance_name: instance_name.as_ref().to_string(),
             }
         )
     }
@@ -90,7 +89,7 @@ impl FileCacheService {
         let now_unixtime = self.get_now_in_unixtime_secs()?;
         let item_metadata: FileCacheItemMetadata = FileCacheItemMetadata {
             ttl_secs,
-            created_unixtime: now_unixtime
+            created_unixtime: now_unixtime,
         };
         let metadata_json = serde_json::to_string(&item_metadata)?;
         fs::write(&metadata_file_path, metadata_json)?;
@@ -146,9 +145,8 @@ impl FileCacheService {
                         fs::remove_file(metadata_file_path)?;
                     }
 
-                    return Ok(None)
+                    return Ok(None);
                 }
-
             }
 
             if file_path.exists() {
@@ -165,12 +163,10 @@ impl FileCacheService {
                         Ok(None)
                     }
                 }
-
             } else {
                 info!("file cache entity '{}' wasn't found", item_name.as_ref());
                 Ok(None)
             }
-
         } else {
             info!("metadata file not found for item '{}', cache file will be removed", item_name.as_ref());
             if file_path.exists() {
@@ -212,15 +208,10 @@ mod ttl_tests {
 
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
-    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
     use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService, METADATA_FILENAME_POSTFIX};
-
-    #[derive(Serialize, Deserialize, PartialEq, Debug)]
-    struct Demo {
-        pub login: String
-    }
+    use crate::tests::{Demo, get_demo_entity};
 
     #[test]
     fn delete_all_cache_item_file_if_metadata_is_missing() {
@@ -399,25 +390,16 @@ mod ttl_tests {
 
         assert_eq!(result, demo);
     }
-
-    fn get_demo_entity() -> Demo {
-        Demo {  login: "Barry".to_string() }
-    }
 }
 
 #[cfg(test)]
 mod get_tests {
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
-    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
-
-    #[derive(Serialize, Deserialize, PartialEq, Debug)]
-    struct Demo {
-        pub login: String
-    }
+    use crate::tests::Demo;
 
     #[test]
     fn return_none_for_unknown_cache_item() {
@@ -443,15 +425,10 @@ mod store_tests {
 
     use non_blank_string_rs::NonBlankString;
     use non_blank_string_rs::utils::get_random_nonblank_string;
-    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
-
-    #[derive(Serialize, Deserialize, PartialEq, Debug)]
-    struct Demo {
-        pub login: String
-    }
+    use crate::tests::{Demo, get_demo_entity};
 
     #[test]
     fn store_and_get() {
@@ -520,9 +497,7 @@ mod store_tests {
 
         assert!(service.store(&namespace, &name, &first_item, 0).is_ok());
 
-        let second_item = Demo {
-            login: "Gerry".to_string()
-        };
+        let second_item = get_demo_entity();
 
         assert!(service.store(&namespace, &name, &second_item, 0).is_ok());
 
@@ -532,10 +507,6 @@ mod store_tests {
                 .join(namespace.as_ref())
                 .exists()
         );
-    }
-
-    fn get_demo_entity() -> Demo {
-        Demo {  login: "Jerry".to_string() }
     }
 }
 
@@ -565,5 +536,47 @@ mod new_tests {
         FileCacheService::new(&root_path_str, &instance_name).unwrap();
 
         assert!(root_path.exists());
+    }
+}
+
+#[cfg(test)]
+mod corrupted_data_tests {
+    use std::fs;
+    use std::path::Path;
+
+    use non_blank_string_rs::NonBlankString;
+    use non_blank_string_rs::utils::get_random_nonblank_string;
+    use tempfile::tempdir;
+
+    use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService};
+    use crate::tests::{Demo, get_demo_entity};
+
+    #[test]
+    fn return_none_for_corrupted_item_content() {
+        let root_path_tmp = tempdir().unwrap();
+        let root_path = root_path_tmp.path();
+        let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
+
+        let instance_name = get_random_nonblank_string();
+
+        let service = FileCacheService::new(
+            &root_path_str, &instance_name).unwrap();
+
+        let namespace = get_random_nonblank_string();
+        let name = get_random_nonblank_string();
+
+        let demo = get_demo_entity();
+
+        assert!(service.store(&namespace, &name, &demo, 0).is_ok());
+
+        let filename = format!("{}-{}", name.as_ref(), CACHE_FILENAME_POSTFIX);
+
+        let cache_item_path = Path::new(root_path_str.as_ref())
+                                        .join(instance_name.as_ref())
+                                        .join(namespace.as_ref()).join(filename);
+
+        fs::write(cache_item_path, "invalid-json-data").unwrap();
+
+        assert!(service.get::<Demo>(&namespace, &name).unwrap().is_none());
     }
 }
