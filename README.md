@@ -1,6 +1,6 @@
 # fkesh
 
-Non thread-safe file cache.
+Synchronous file cache.
 
 Storage format: JSON.
 
@@ -61,6 +61,8 @@ match service.get(&namespace, "chappy")? {
 [CACHE-ROOT]/[INSTANCE-NAME]/[NAMESPACE]/[ITEM]-cache-metadata.json
 ```
 
-## Future plans:
+## What about thread safety, async, etc.?
 
-- Thread safe
+Async file cache is a huge complex topic and requires a lot of time, 
+so I've decided to stay with synchronous implementation. 
+This library is suitable for my tiny projects :)
