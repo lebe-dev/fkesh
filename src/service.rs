@@ -224,10 +224,12 @@ mod ttl_tests {
     use tempfile::tempdir;
 
     use crate::service::{CACHE_FILENAME_POSTFIX, FileCacheService, METADATA_FILENAME_POSTFIX};
-    use crate::tests::{Demo, get_demo_entity};
+    use crate::tests::{Demo, get_demo_entity, init_env_logging};
 
     #[test]
     fn delete_all_cache_item_file_if_metadata_is_missing() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -265,6 +267,8 @@ mod ttl_tests {
 
     #[test]
     fn return_none_if_metadata_companion_file_is_missing() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -294,6 +298,8 @@ mod ttl_tests {
 
     #[test]
     fn return_item_with_existing_ttl() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -319,6 +325,8 @@ mod ttl_tests {
 
     #[test]
     fn return_none_for_item_with_expired_ttl() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -342,6 +350,8 @@ mod ttl_tests {
 
     #[test]
     fn remove_files_for_cache_item_with_expired_ttl() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -381,6 +391,8 @@ mod ttl_tests {
 
     #[test]
     fn item_should_be_retrieved_with_zero_ttl() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -412,10 +424,12 @@ mod get_tests {
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
-    use crate::tests::Demo;
+    use crate::tests::{Demo, init_env_logging};
 
     #[test]
     fn return_none_for_unknown_cache_item() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
@@ -441,10 +455,12 @@ mod store_tests {
     use tempfile::tempdir;
 
     use crate::service::FileCacheService;
-    use crate::tests::{Demo, get_demo_entity};
+    use crate::tests::{Demo, get_demo_entity, init_env_logging};
 
     #[test]
     fn store_and_get() {
+        init_env_logging();
+
         let root_path_tmp = tempdir().unwrap();
         let root_path = root_path_tmp.path();
         let root_path_str = NonBlankString::parse(&format!("{}", root_path.display())).unwrap();
