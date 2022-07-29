@@ -10,7 +10,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-fkesh = { git = "https://github.com/lebe-dev/fkesh.git", version = "0.1.0" }
+fkesh = { git = "https://github.com/lebe-dev/fkesh.git", version = "0.2.0" }
 ```
 
 Use:
